@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Man10PlayerDataArchive">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/../Stronger Pro/spigot/plugins/Man10PlayerDataArchive.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

@@ -1,0 +1,8 @@
+name: Man10Home
+version: ${project.version}
+main: man10homeplugin.man10homeplugin.Man10Home
+authors: [Sho0]
+description: Man10 Home Plugin
+website: man10.red
+commands:
+ home:
