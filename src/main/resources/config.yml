@@ -6,6 +6,9 @@ mysql:
   db: mat
 settings:
  free_slots: 2
+ disabled_worlds:
+  - op
+  - test
  price:
   0: 100000
   1: 300000
@@ -61,6 +64,3 @@ settings:
   51: 137800000
   52: 143100000
   53: 148500000
-  disabled_worlds:
-   - op
-   - test

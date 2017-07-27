@@ -5,6 +5,7 @@ import man10vaultapi.vaultapi.VaultAPI;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.Sound;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -17,6 +18,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.AnvilInventory;
@@ -91,14 +93,8 @@ public final class Man10Home extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
-        boot();
-    }
-    void boot(){
-        // Plugin startup logic
-        config = this.getConfig();
-        mysql = new MySQLAPI(this, "Man10Home");
         this.saveDefaultConfig();
-        forbiddenWorld = (List<String>) config.getList("settings.disabled_worlds");
+        mysql = new MySQLAPI(this, "Man10Home");
         mysql.execute(createHomInfo);
         mysql.execute(createHomeLog);
         Bukkit.getPluginManager().registerEvents(this, this);
@@ -107,6 +103,10 @@ public final class Man10Home extends JavaPlugin implements Listener {
         pda = new Man10PlayerDataArchiveAPI();
         freeSlot = getConfig().getInt("settings.free_slots");
         defaultLocation = getDefaultLocation();
+        a();
+    }
+    void a(){
+        forbiddenWorld = getConfig().getStringList("settings.disabled_worlds");
     }
 
 
@@ -155,7 +155,6 @@ public final class Man10Home extends JavaPlugin implements Listener {
 
     void reloadConfigFile(){
         reloadConfig();
-        forbiddenWorld = (List<String>) config.getList("settings.disabled_worlds");
         loadPriceToMemory();
         for(int i = 0;i < inMenu.size();i++){
             Bukkit.getPlayer(inMenu.get(i)).closeInventory();
@@ -163,6 +162,7 @@ public final class Man10Home extends JavaPlugin implements Listener {
         playerHomeMenu.clear();
         playerHomeLocation.clear();
         defaultLocation = getDefaultLocation();
+        a();
     }
 
     int getLastSlot(UUID uuid){
@@ -189,6 +189,13 @@ public final class Man10Home extends JavaPlugin implements Listener {
                 return false;
             }
             Player p = (Player) sender;
+            buyInfo.remove(p.getUniqueId());
+            menu.remove(p.getUniqueId());
+            editingSlotInfo.remove(p.getUniqueId());
+            editingText.remove(p.getUniqueId());
+            if(editingText.isEmpty()){
+                someOneEditingText = false;
+            }
             if(args.length == 1){
                 if(args[0].equalsIgnoreCase("shoisawsom")){
                     Man10PlayerData pd = pda.getPlayerData(p.getUniqueId());
@@ -197,57 +204,10 @@ public final class Man10Home extends JavaPlugin implements Listener {
                         for(int i = 0;i < 53;i++){
                             buyHouse(p,i);
                         }
+                        p.sendTitle("§4§l§n§kA§eホーム解禁§4§l§n§kA","Sho is nice :D",20,30,20);
+                        p.playSound(p.getLocation(), Sound.ENTITY_WITHER_SPAWN,1,1);
                         playerHomeLocation.remove(p.getUniqueId());
                         playerHomeMenu.remove(p.getUniqueId());
-                    }
-                    return false;
-                }
-                if(args[0].equalsIgnoreCase("ohaman")){
-                    int count = 0;
-                    ResultSet rs = mysql.query("SELECT count(*) FROM home_log WHERE uuid ='" + p.getUniqueId() + "' and action ='OhamanFree'");
-                    try {
-                        while (rs.next()){
-                            count = rs.getInt("count(*)");
-                        }
-                        rs.close();
-                        mysql.close();
-                    if(count == 0){
-                        int i = 0;
-                        ResultSet resultSet = mysql.query("SELECT COUNT(*) FROM home_info WHERE uuid ='" + p.getUniqueId() + "'");
-                        while (resultSet.next()){
-                            i = resultSet.getInt("COUNT(*)");
-                        }
-                        resultSet.close();
-                        mysql.close();
-                        if(i == 0){
-                            for(int ii = 0;ii < freeSlot;ii++){
-                                buyHouse(p,ii);
-                            }
-                            createHomeLog(p.getName(),p.getUniqueId(),"OhamanFree","0");
-                            int val = freeSlot + 2;
-                            for(int iiii = 0;iiii < val;iiii++){
-                                buyHouse(p,iiii);
-                            }
-                            playerHomeLocation.remove(p.getUniqueId());
-                            playerHomeMenu.remove(p.getUniqueId());
-                            p.sendMessage(prefix + "無償でホーム" + val + "つが支給されました");
-                            return false;
-                        }else{
-                            int lastSlot = getLastSlot(p.getUniqueId());
-                            for(int iii = 0; iii < 3; iii++){
-                                buyHouse(p,lastSlot + iii);
-                            }
-                            createHomeLog(p.getName(),p.getUniqueId(),"OhamanFree","0");
-                            p.sendMessage(prefix + "無償でホームが2つ支給されました");
-                            playerHomeLocation.remove(p.getUniqueId());
-                            playerHomeMenu.remove(p.getUniqueId());
-                        }
-                        return false;
-                    }else{
-                        p.sendMessage(prefix + "無償のホームは一度しかできません");
-                    }
-                    } catch (SQLException e) {
-                        e.printStackTrace();
                     }
                     return false;
                 }
@@ -360,6 +320,7 @@ public final class Man10Home extends JavaPlugin implements Listener {
             buyInfo.remove(e.getPlayer().getUniqueId());
             menu.remove(e.getPlayer().getUniqueId());
             editingSlotInfo.remove(e.getPlayer().getUniqueId());
+            editingText.remove(e.getPlayer().getUniqueId());
             escapeEditMode(e.getPlayer());
             return;
         }
@@ -370,6 +331,7 @@ public final class Man10Home extends JavaPlugin implements Listener {
             buyInfo.remove(e.getPlayer().getUniqueId());
             menu.remove(e.getPlayer().getUniqueId());
             editingSlotInfo.remove(e.getPlayer().getUniqueId());
+            editingText.remove(e.getPlayer().getUniqueId());
             escapeEditMode(e.getPlayer());
             return;
         }
@@ -382,6 +344,7 @@ public final class Man10Home extends JavaPlugin implements Listener {
         editingSlotInfo.remove(e.getPlayer().getUniqueId());
         playerHomeMenu.remove(e.getPlayer().getUniqueId());
         playerHomeLocation.remove(e.getPlayer().getUniqueId());
+        editingText.remove(e.getPlayer().getUniqueId());
         escapeEditMode(e.getPlayer());
     }
 
@@ -510,7 +473,7 @@ public final class Man10Home extends JavaPlugin implements Listener {
 
         ItemStack changeLocation = new ItemStack(Material.BED,1,(short) 14);
         ItemMeta changeLocationMeta = changeLocation.getItemMeta();
-        changeLocationMeta.setDisplayName("§c§lロケーションを変更する");
+        changeLocationMeta.setDisplayName("§c§lホームの位置を設定する");
         changeLocation.setItemMeta(changeLocationMeta);
 
         ItemStack changeIcon = new ItemStack(Material.WORKBENCH);
@@ -549,8 +512,18 @@ public final class Man10Home extends JavaPlugin implements Listener {
     @EventHandler
     public void leaveGame(PlayerQuitEvent e){
         inMenu.remove(e.getPlayer().getUniqueId());
-        if(inMenu.isEmpty()){
+        moveMenu.remove(e.getPlayer().getUniqueId());
+        buyInfo.remove(e.getPlayer().getUniqueId());
+        menu.remove(e.getPlayer().getUniqueId());
+        editingSlotInfo.remove(e.getPlayer().getUniqueId());
+        playerHomeMenu.remove(e.getPlayer().getUniqueId());
+        playerHomeLocation.remove(e.getPlayer().getUniqueId());
+        editingText.remove(e.getPlayer().getUniqueId());
+        if(editingText.isEmpty()){
             someOneEditingText = false;
+        }
+        if(inMenu.isEmpty()){
+            someoneInMenu = false;
         }
     }
 
@@ -634,14 +607,15 @@ public final class Man10Home extends JavaPlugin implements Listener {
         }
         List<InventoryItem> inv = new ArrayList<>();
         try {
+
             ResultSet resultSet = mysql.query("SELECT count(*) FROM home_info WHERE uuid ='" + p.getUniqueId() + "'");
-            while (resultSet.next()){
-                if(resultSet.getInt("count(*)") == 0){
-                    for(int i = 0;i < freeSlot;i++){
-                        buyHouse(p,i);
+                while (resultSet.next()) {
+                    if (resultSet.getInt("count(*)") == 0) {
+                        for (int i = 0; i < freeSlot; i++) {
+                            buyHouse(p, i);
+                        }
                     }
                 }
-            }
             resultSet.close();
             ResultSet rs = mysql.query("SELECT * FROM home_info WHERE uuid ='" + p.getUniqueId() + "'");
             while (rs.next()){
@@ -669,6 +643,8 @@ public final class Man10Home extends JavaPlugin implements Listener {
             rs.close();
             mysql.close();
         } catch (SQLException e) {
+            e.printStackTrace();
+        } catch (Exception e){
             e.printStackTrace();
         }
         String name = Bukkit.getPlayer(p.getUniqueId()).getName();

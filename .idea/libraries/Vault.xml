@@ -1,8 +1,8 @@
 <component name="libraryTable">
   <library name="Vault">
     <CLASSES>
-      <root url="jar://$PROJECT_DIR$/../Stronger Pro/spigot/plugins/Man10MysqlApi.jar!/" />
-      <root url="jar://$PROJECT_DIR$/../Stronger Pro/spigot/plugins/Man10VaultAPI.jar!/" />
+      <root url="jar://$PROJECT_DIR$/../../minecraft server/plugins/Man10VaultAPI.jar!/" />
+      <root url="jar://$PROJECT_DIR$/../../minecraft server/plugins/Vault.jar!/" />
     </CLASSES>
     <JAVADOC />
     <SOURCES />

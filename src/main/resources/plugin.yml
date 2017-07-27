@@ -2,6 +2,7 @@ name: Man10Home
 version: ${project.version}
 main: man10homeplugin.man10homeplugin.Man10Home
 authors: [Sho0]
+softdepend: [Vault,VaultAPI,Man10MySQLAPI,Man10PlayerDataArchive]
 description: Man10 Home Plugin
 website: man10.red
 commands:

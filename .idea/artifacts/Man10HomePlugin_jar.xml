@@ -1,8 +1,14 @@
 <component name="ArtifactManager">
   <artifact type="jar" name="Man10HomePlugin:jar">
-    <output-path>$PROJECT_DIR$/../Stronger Pro/spigot/plugins</output-path>
+    <output-path>$PROJECT_DIR$/../../minecraft server/plugins</output-path>
     <root id="archive" name="Man10HomePlugin.jar">
       <element id="module-output" name="Man10HomePlugin" />
+      <element id="directory" name="META-INF">
+        <element id="file-copy" path="$PROJECT_DIR$/META-INF/MANIFEST.MF" />
+      </element>
+      <element id="library" level="project" name="Man10MysqlApi" />
+      <element id="library" level="project" name="Man10PlayerDataArchive" />
+      <element id="library" level="project" name="Vault" />
     </root>
   </artifact>
 </component>
