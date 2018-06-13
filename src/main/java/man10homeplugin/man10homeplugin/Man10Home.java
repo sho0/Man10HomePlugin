@@ -62,6 +62,7 @@ public final class Man10Home extends JavaPlugin implements Listener {
             "\t`icon` VARCHAR(128) NULL DEFAULT '0',\n" +
             "\t`damage` INT NULL DEFAULT '0',\n" +
             "\t`name` VARCHAR(128) NULL DEFAULT '0',\n" +
+            "\t`server` VARCHAR(64) NULL DEFAULT '0',\n" +
             "\t`world` VARCHAR(64) NULL DEFAULT '0',\n" +
             "\t`x` DOUBLE NULL DEFAULT '0',\n" +
             "\t`y` DOUBLE NULL DEFAULT '0',\n" +
