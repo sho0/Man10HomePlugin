@@ -8,7 +8,6 @@
       </element>
       <element id="library" level="project" name="Man10MysqlApi" />
       <element id="library" level="project" name="Man10PlayerDataArchive" />
-      <element id="library" level="project" name="Vault" />
     </root>
   </artifact>
 </component>

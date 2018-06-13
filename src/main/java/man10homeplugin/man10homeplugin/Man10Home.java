@@ -1,18 +1,13 @@
 package man10homeplugin.man10homeplugin;
 
-import jdk.nashorn.internal.ir.Block;
-import man10vaultapi.vaultapi.VaultAPI;
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.Sound;
+import org.bukkit.*;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.Action;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
@@ -30,7 +25,12 @@ import org.omg.CORBA.INTERNAL;
 import red.man10.Man10PlayerDataArchive.Man10PlayerData;
 import red.man10.Man10PlayerDataArchive.Man10PlayerDataArchiveAPI;
 import red.man10.man10mysqlapi.MySQLAPI;
+import red.man10.man10vaultapiplus.Man10VaultAPI;
+import red.man10.man10vaultapiplus.enums.TransactionCategory;
+import red.man10.man10vaultapiplus.enums.TransactionType;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.math.BigDecimal;
 import java.sql.Array;
 import java.sql.ResultSet;
@@ -38,6 +38,7 @@ import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
+import java.util.logging.Level;
 
 public final class Man10Home extends JavaPlugin implements Listener {
 
@@ -45,9 +46,11 @@ public final class Man10Home extends JavaPlugin implements Listener {
     
     String prefix = "§e§l[§d§lMan10Home§e§l]§d§l";
     MySQLAPI mysql = null;
-    VaultAPI vault = null;
+    Man10VaultAPI vault = null;
 
     FileConfiguration config = null;
+
+    String serverName = null;
 
     int freeSlot = 0;
 
@@ -93,16 +96,18 @@ public final class Man10Home extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
+        this.getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
         this.saveDefaultConfig();
         mysql = new MySQLAPI(this, "Man10Home");
         mysql.execute(createHomInfo);
         mysql.execute(createHomeLog);
         Bukkit.getPluginManager().registerEvents(this, this);
-        vault = new VaultAPI();
+        vault = new Man10VaultAPI("Man10HomePlugin");
         loadPriceToMemory();
         pda = new Man10PlayerDataArchiveAPI();
         freeSlot = getConfig().getInt("settings.free_slots");
         defaultLocation = getDefaultLocation();
+        serverName = getConfig().getString("settings.server_name");
         a();
     }
     void a(){
@@ -124,7 +129,7 @@ public final class Man10Home extends JavaPlugin implements Listener {
     HashMap<UUID,String> menu = new HashMap<>();
 
     HashMap<UUID,Inventory> playerHomeMenu = new HashMap<>();
-    HashMap<UUID,HashMap<Integer,Location>> playerHomeLocation = new HashMap<>();
+    HashMap<UUID,HashMap<Integer,SuperLocation>> playerHomeLocation = new HashMap<>();
 
     ArrayList<UUID> inMenu = new ArrayList<>();
     boolean someoneInMenu = false;
@@ -183,117 +188,162 @@ public final class Man10Home extends JavaPlugin implements Listener {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if(command.getName().equalsIgnoreCase("home")){
-            if(sender instanceof Player == false){
-                sender.sendMessage(prefix + "このコマンドはコンソールからは実行できません");
-                return false;
-            }
-            Player p = (Player) sender;
-            buyInfo.remove(p.getUniqueId());
-            menu.remove(p.getUniqueId());
-            editingSlotInfo.remove(p.getUniqueId());
-            editingText.remove(p.getUniqueId());
-            if(editingText.isEmpty()){
-                someOneEditingText = false;
-            }
-            if(args.length == 1){
-                if(args[0].equalsIgnoreCase("shoisawsom")){
-                    Man10PlayerData pd = pda.getPlayerData(p.getUniqueId());
-                    if(pd.authLevel > 1){
-                        mysql.execute("DELETE FROM home_info WHERE uuid ='" + p.getUniqueId() + "'");
-                        for(int i = 0;i < 53;i++){
-                            buyHouse(p,i);
+        if (command.getName().equalsIgnoreCase("home")) {
+            if (sender instanceof ConsoleCommandSender) {
+                if (args.length == 3) {
+                    if (args[0].equalsIgnoreCase("teleport")) {
+                        try {
+                            int id = Integer.parseInt(args[1]);
+                            Player p = Bukkit.getPlayer(args[2]);
+                            if(!playerHomeLocation.containsKey(p.getUniqueId())){
+                                putLocationsToMemory(p.getUniqueId());
+                            }
+                            p.teleport(playerHomeLocation.get(p.getUniqueId()).get(id).getLocation());
+                        } catch (NumberFormatException e) {
                         }
-                        p.sendTitle("§4§l§n§kA§eホーム解禁§4§l§n§kA","Sho is nice :D",20,30,20);
-                        p.playSound(p.getLocation(), Sound.ENTITY_WITHER_SPAWN,1,1);
-                        playerHomeLocation.remove(p.getUniqueId());
-                        playerHomeMenu.remove(p.getUniqueId());
                     }
-                    return false;
+                    return true;
                 }
-                if (args[0].equalsIgnoreCase("help")) {
-                    p.sendMessage("§6==========" + prefix + "§6==========");
-                    p.sendMessage("§d/home ホームを開く");
-                    p.sendMessage("§d/home total すべての売り上げを見る");
-                    p.sendMessage("§d/home player <name> 人のhomeを見る");
-                    p.sendMessage("§d/home reload コンフィグのリロード");
-                    p.sendMessage("§6================================");
-                    p.sendMessage("§c§lCreated By Sho0");
-                    return false;
-                }
-                if(args[0].equalsIgnoreCase("reload")){
-                    if(!sender.hasPermission("man10.home.reload")){
-                        p.sendMessage(prefix + "あなたには権限がありません");
-                        return false;
-                    }
-                    reloadConfigFile();
-                    p.sendMessage(prefix + "コンフィグをリロードしました");
-                    return false;
-                }
-                if(args[0].equalsIgnoreCase("total")){
-                    if(!sender.hasPermission("man10.home.total")){
-                        return false;
-                    }
-                    ResultSet rs = mysql.query("SELECT sum(value) FROM home_log WHERE action like '%BuyHouse%';");
-                    try {
-                        while (rs.next()){
-                            sender.sendMessage(prefix + "総合売り上げ:" + Double.parseDouble(rs.getString("sum(value)")));
+                if(args.length == 4){
+                    if (args[0].equalsIgnoreCase("teleport")) {
+                        try {
+                            int id = Integer.parseInt(args[1]);
+                            Player p = Bukkit.getPlayer(args[2]);
+                            UUID uuid = UUID.fromString(args[3]);
+                            if(!playerHomeLocation.containsKey(uuid)){
+                                putLocationsToMemory(uuid);
+                            }
+                            p.teleport(playerHomeLocation.get(uuid).get(id).getLocation());
+                        } catch (NumberFormatException e) {
                         }
-                        rs.close();
-                        mysql.close();
-                    } catch (SQLException e) {
-                        e.printStackTrace();
                     }
+                }
+                return true;
+            }
+                if (sender instanceof Player == false) {
+                    sender.sendMessage(prefix + "このコマンドはコンソールからは実行できません");
                     return false;
                 }
-                if(args[0].equalsIgnoreCase("setdefaultlocation")){
-                    if(!sender.hasPermission("man10.home.setdefaultlocation")){
+                Player p = (Player) sender;
+                buyInfo.remove(p.getUniqueId());
+                menu.remove(p.getUniqueId());
+                editingSlotInfo.remove(p.getUniqueId());
+                editingText.remove(p.getUniqueId());
+                if (editingText.isEmpty()) {
+                    someOneEditingText = false;
+                }
+                if (args.length == 1) {
+                    if (args[0].equalsIgnoreCase("delforbidden")) {
+                        for (int i = 0; i < forbiddenWorld.size(); i++) {
+                            mysql.execute("UPDATE home_info SET world ='" + defaultLocation.getWorld().getName() + "', x ='" + defaultLocation.getX() + "', y ='" + defaultLocation.getY() + "', z ='" + defaultLocation.getZ() + "', pitch ='" + defaultLocation.getPitch() + "', yaw ='" + defaultLocation.getYaw() + "' WHERE world = '" + forbiddenWorld.get(i) + "'");
+                        }
+                        ResultSet homes = mysql.query("SELECT uuid,world FROM home_info");
+                        try {
+                            while (homes.next()) {
+                            }
+                        } catch (SQLException e) {
+                            e.printStackTrace();
+                        }
+                        p.sendMessage(prefix + "違法ホームをデフォルトホームに更新しました");
                         return false;
                     }
-                    sender.sendMessage(prefix + "デフォルトロケーションを設置しました");
-                    setDefaultLocation(p.getLocation());
-                    return false;
-                }
-            }
-            if (args.length == 2){
-                try {
-                    if (args[0].equalsIgnoreCase("player")) {
-                        if (!p.hasPermission("man10.home.admin")) {
+                    if (args[0].equalsIgnoreCase("shoisawsom")) {
+                        Man10PlayerData pd = pda.getPlayerData(p.getUniqueId());
+                        if (pd.authLevel > 1) {
+                            mysql.execute("DELETE FROM home_info WHERE uuid ='" + p.getUniqueId() + "'");
+                            for (int i = 0; i < 53; i++) {
+                                buyHouse(p, i);
+                            }
+                            p.sendTitle("§4§l§n§kA§eホーム解禁§4§l§n§kA", "Sho is nice :D", 20, 30, 20);
+                            p.playSound(p.getLocation(), Sound.ENTITY_WITHER_SPAWN, 1, 1);
+                            playerHomeLocation.remove(p.getUniqueId());
+                            playerHomeMenu.remove(p.getUniqueId());
+                        }
+                        return false;
+                    }
+                    if (args[0].equalsIgnoreCase("help")) {
+                        p.sendMessage("§6==========" + prefix + "§6==========");
+                        p.sendMessage("§d/home ホームを開く");
+                        p.sendMessage("§d/home total すべての売り上げを見る");
+                        p.sendMessage("§d/home player <name> 人のhomeを見る");
+                        p.sendMessage("§d/home reload コンフィグのリロード");
+                        p.sendMessage("§6================================");
+                        p.sendMessage("§c§lCreated By Sho0");
+                        return false;
+                    }
+                    if (args[0].equalsIgnoreCase("reload")) {
+                        if (!sender.hasPermission("man10.home.reload")) {
                             p.sendMessage(prefix + "あなたには権限がありません");
                             return false;
                         }
-                        UUID uuid = pda.getUUIDFromName(args[1]);
-                        if (uuid  == null) {
-                            p.sendMessage("§4§l[M.A.T]§f§lプレイヤーが存在しません");
-                            return false;
-                        }
-                        if (!playerHomeMenu.containsKey(uuid)) {
-                            playerHomeMenu.put(uuid, getPlayerInventory(uuid));
-                        }
-                        adminInspec.put(p.getUniqueId(), uuid);
-                        inMenu.add(p.getUniqueId());
-                        menu.put(p.getUniqueId(), "admin");
-                        someoneInMenu = true;
-                        p.openInventory(getPlayerInventory(uuid));
+                        reloadConfigFile();
+                        p.sendMessage(prefix + "コンフィグをリロードしました");
                         return false;
                     }
-                }catch (Exception e){
-                    e.printStackTrace();
+                    if (args[0].equalsIgnoreCase("total")) {
+                        if (!sender.hasPermission("man10.home.total")) {
+                            return false;
+                        }
+                        ResultSet rs = mysql.query("SELECT sum(value) FROM home_log WHERE action like '%BuyHouse%';");
+                        try {
+                            while (rs.next()) {
+                                sender.sendMessage(prefix + "総合売り上げ:" + Double.parseDouble(rs.getString("sum(value)")));
+                            }
+                            rs.close();
+                            mysql.close();
+                        } catch (SQLException e) {
+                            e.printStackTrace();
+                        }
+                        return false;
+                    }
+                    if (args[0].equalsIgnoreCase("setdefaultlocation")) {
+                        if (!sender.hasPermission("man10.home.setdefaultlocation")) {
+                            return false;
+                        }
+                        sender.sendMessage(prefix + "デフォルトロケーションを設置しました");
+                        setDefaultLocation(p.getLocation());
+                        return false;
+                    }
                 }
-            }
-            if(!playerHomeMenu.containsKey(p.getUniqueId())){
-                playerHomeMenu.put(p.getUniqueId(),mainMenuGenerator(p));
-            }
-            someoneInMenu = true;
-            inMenu.add(p.getUniqueId());
-            p.openInventory(playerHomeMenu.get(p.getUniqueId()));
+                if (args.length == 2) {
+                    try {
+                        if (args[0].equalsIgnoreCase("player")) {
+                            if (!p.hasPermission("man10.home.admin")) {
+                                p.sendMessage(prefix + "あなたには権限がありません");
+                                return false;
+                            }
+                            UUID uuid = pda.getUUIDFromName(args[1]);
+                            if (uuid == null) {
+                                p.sendMessage("§4§l[M.A.T]§f§lプレイヤーが存在しません");
+                                return false;
+                            }
+                            if (!playerHomeMenu.containsKey(uuid)) {
+                                playerHomeMenu.put(uuid, getPlayerInventory(uuid));
+                            }
+                            adminInspec.put(p.getUniqueId(), uuid);
+                            inMenu.add(p.getUniqueId());
+                            menu.put(p.getUniqueId(), "admin");
+                            someoneInMenu = true;
+                            p.openInventory(getPlayerInventory(uuid));
+                            return false;
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+                if (!playerHomeMenu.containsKey(p.getUniqueId())) {
+                    playerHomeMenu.put(p.getUniqueId(), mainMenuGenerator(p));
+                }
+                someoneInMenu = true;
+                inMenu.add(p.getUniqueId());
+                p.openInventory(playerHomeMenu.get(p.getUniqueId()));
         }
         return false;
     }
 
     void updateLocation(Player p,int slot,Location l){
-        mysql.execute("UPDATE home_info SET world ='" + l.getWorld().getName() + "', x ='" + l.getX() + "', y ='" + l.getY() + "', z ='" + l.getZ() + "', pitch ='" + l.getPitch() + "', yaw ='" + l.getYaw() + "' WHERE uuid ='" + p.getUniqueId() + "' and slot ='" + slot +"'");
-        createHomeLog(p.getName(),p.getUniqueId(),"UpdateLocation","world = " + l.getWorld().getName());
+        mysql.execute("UPDATE home_info SET server ='" + serverName + "', world ='" + l.getWorld().getName() + "', x ='" + l.getX() + "', y ='" + l.getY() + "', z ='" + l.getZ() + "', pitch ='" + l.getPitch() + "', yaw ='" + l.getYaw() + "' WHERE uuid ='" + p.getUniqueId() + "' and slot ='" + slot +"'");
+        createHomeLog(p.getName(),p.getUniqueId(),"UpdateLocation","server = " + serverName + " world = " + l.getWorld().getName());
     }
 
     void updateIcon(Player p,int slot,ItemStack item){
@@ -403,8 +453,11 @@ public final class Man10Home extends JavaPlugin implements Listener {
                 }
             }
             if(adminInspec.containsKey(e.getWhoClicked().getUniqueId())){
+                if(e.getCurrentItem() == null || e.getCurrentItem().getType() == Material.AIR){
+                    return;
+                }
                 e.setCancelled(true);
-                e.getWhoClicked().teleport(playerHomeLocation.get(adminInspec.get(e.getWhoClicked().getUniqueId())).get(e.getSlot()));
+                newTeleportPlayerAdmin(((Player) e.getWhoClicked()),adminInspec.get(e.getWhoClicked().getUniqueId()),e.getSlot());
                 e.getWhoClicked().sendMessage(prefix + "ホームにテレポートしました");
                 return;
             }
@@ -414,7 +467,7 @@ public final class Man10Home extends JavaPlugin implements Listener {
                 int[] no = {5,6,7,8};
                 for(int i = 0;i < ok.length;i++){
                     if(e.getSlot() == ok[i]){
-                        vault.withdraw(e.getWhoClicked().getUniqueId(),price.get(buyInfo.get(e.getWhoClicked().getUniqueId())));
+                        vault.transferMoneyPlayerToCountry(e.getWhoClicked().getUniqueId(),price.get(buyInfo.get(e.getWhoClicked().getUniqueId())), TransactionCategory.SHOP, TransactionType.BUY, "Bought Home: " + buyInfo.get(e.getWhoClicked().getUniqueId()));
                         e.getWhoClicked().sendMessage(prefix + "スロット" + buyInfo.get(e.getWhoClicked().getUniqueId()) + "を購入しました");
                         createHomeLog(e.getWhoClicked().getName(),e.getWhoClicked().getUniqueId(),"BuyHouse slot:" + buyInfo.get(e.getWhoClicked().getUniqueId()), String.valueOf(price.get(buyInfo.get(e.getWhoClicked().getUniqueId()))));
                         buyHouse((Player) e.getWhoClicked(),buyInfo.get(e.getWhoClicked().getUniqueId()));
@@ -458,7 +511,7 @@ public final class Man10Home extends JavaPlugin implements Listener {
                 return;
             }
            //e.setCancelled(true);
-            e.getWhoClicked().teleport(playerHomeLocation.get(e.getWhoClicked().getUniqueId()).get(e.getSlot()));
+            newTeleportPlayer(((Player) e.getWhoClicked()),e.getSlot());
             e.getWhoClicked().sendMessage(prefix + "ホームにテレポートしました");
             return;
         }
@@ -558,10 +611,11 @@ public final class Man10Home extends JavaPlugin implements Listener {
     void putLocationsToMemory(UUID uuid){
         ResultSet rs = mysql.query("SELECT * FROM home_info WHERE uuid ='" + uuid + "'");
         try {
-            HashMap<Integer,Location> map = new HashMap<>();
+            HashMap<Integer,SuperLocation> map = new HashMap<>();
             while (rs.next()){
                 Location l = new Location(Bukkit.getWorld(rs.getString("world")),rs.getDouble("x"),rs.getDouble("y"),rs.getDouble("z"),rs.getFloat("yaw"),rs.getFloat("pitch"));
-                map.put(rs.getInt("slot"),l);
+                SuperLocation sl = new SuperLocation(l,rs.getString("server"));
+                map.put(rs.getInt("slot"),sl);
             }
             playerHomeLocation.put(uuid,map);
             rs.close();
@@ -579,7 +633,7 @@ public final class Man10Home extends JavaPlugin implements Listener {
                 l = defaultLocation;
             }
         }
-        boolean b = mysql.execute("INSERT INTO home_info VALUES('0','" + p.getName() + "','" + p.getUniqueId() + "','" + slot + "','" + defaultIcon.getType() + "','" + defaultIcon.getDurability() + "','Home" + slot + "','" + l.getWorld().getName() + "','"+ l.getX() + "','" + l.getY() + "','" + l.getZ() + "','" + l.getPitch() + "','" + l.getYaw() + "','" + currentTimeNoBracket() + "','" + System.currentTimeMillis()/1000 + "');");
+        boolean b = mysql.execute("INSERT INTO home_info VALUES('0','" + p.getName() + "','" + p.getUniqueId() + "','" + slot + "','" + defaultIcon.getType() + "','" + defaultIcon.getDurability() + "','Home" + slot + "','" + serverName + "','"  + l.getWorld().getName() + "','"+ l.getX() + "','" + l.getY() + "','" + l.getZ() + "','" + l.getPitch() + "','" + l.getYaw() + "','" + currentTimeNoBracket() + "','" + System.currentTimeMillis()/1000 + "');");
         return b;
     }
 
@@ -625,6 +679,7 @@ public final class Man10Home extends JavaPlugin implements Listener {
                 itemMeta.setDisplayName(rs.getString("name"));
                 List<String> lore = new ArrayList<>();
                 lore.add("§d===============");
+                lore.add("§e§lサーバー:" + rs.getString("server"));
                 lore.add("§e§lワールド：" + rs.getString("world"));
                 BigDecimal bdx = new BigDecimal(rs.getDouble("x")).setScale(1,BigDecimal.ROUND_HALF_UP);
                 BigDecimal bdy = new BigDecimal(rs.getDouble("y")).setScale(1,BigDecimal.ROUND_HALF_UP);
@@ -673,6 +728,7 @@ public final class Man10Home extends JavaPlugin implements Listener {
                 itemMeta.setDisplayName(rs.getString("name"));
                 List<String> lore = new ArrayList<>();
                 lore.add("§d===============");
+                lore.add("§e§lサーバー:" + rs.getString("server"));
                 lore.add("§e§lワールド：" + rs.getString("world"));
                 BigDecimal bdx = new BigDecimal(rs.getDouble("x")).setScale(1,BigDecimal.ROUND_HALF_UP);
                 BigDecimal bdy = new BigDecimal(rs.getDouble("y")).setScale(1,BigDecimal.ROUND_HALF_UP);
@@ -735,6 +791,76 @@ public final class Man10Home extends JavaPlugin implements Listener {
     public Location getDefaultLocation(){
         Location l = new Location(Bukkit.getWorld(getConfig().getString("settings.default_location.world")),getConfig().getDouble("settings.default_location.x"),getConfig().getDouble("settings.default_location.y"),getConfig().getDouble("settings.default_location.z"),Float.parseFloat(String.valueOf(getConfig().getDouble("settings.default_location.yaw"))),Float.parseFloat(String.valueOf(getConfig().getDouble("settings.default_location.pitch"))));
         return l;
+    }
+
+
+    void newTeleportPlayer(Player player, int id){
+        if(serverName.equals(playerHomeLocation.get(player.getUniqueId()).get(id).getServerName())){
+            Bukkit.getServer().dispatchCommand(Bukkit.getServer().getConsoleSender(),"home teleport " + id + " " + player.getName());
+            return;
+        }
+        TransferPlayer(player,playerHomeLocation.get(player.getUniqueId()).get(id).getServerName(),"home teleport " + id + " " + player.getName());
+    }
+    void newTeleportPlayerAdmin(Player player,UUID uuid, int id){
+        if(serverName.equals(playerHomeLocation.get(uuid).get(id).getServerName())){
+            Bukkit.getServer().dispatchCommand(Bukkit.getServer().getConsoleSender(),"home teleport " + id + " " + player.getName() + " " + uuid);
+            return;
+        }
+        TransferPlayer(player,playerHomeLocation.get(uuid).get(id).getServerName(),"home teleport " + id + " " + player.getName() + " "  + uuid);
+    }
+
+    public void TransferPlayer(Player player, String server, String command) {
+        try {
+            String playerName = player.getName();
+                // Connection to a server.
+                if (!server.equalsIgnoreCase("{none}")) {
+
+                    // Here portals work like PM sender/receiver: they send messages to each other
+                    // and then decide, what player should do after he arrives somewhere.
+                    command = command.replace("{PLAYER}", playerName) + "#" + playerName;
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    DataOutputStream dos = new DataOutputStream(baos);
+                    dos.writeUTF("Connect");
+                    dos.writeUTF(server); // TARGET SERVER
+                    player.sendPluginMessage(this, "BungeeCord", baos.toByteArray());
+                    baos.close();
+                    dos.close();
+
+                    // Command that a server should execute.
+                    if (!command.equalsIgnoreCase("{none}")) {
+                        baos = new ByteArrayOutputStream();
+                        dos = new DataOutputStream(baos);
+                        dos.writeUTF("Forward");
+                        dos.writeUTF(server); // TARGET SERVER
+
+                        dos.writeUTF("MCraft");
+                        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+                        DataOutputStream out = new DataOutputStream(bytes);
+                        out.writeUTF(command); // COMMAND
+                        dos.writeShort(bytes.toByteArray().length);
+                        dos.write(bytes.toByteArray());
+
+                        player.sendPluginMessage(this, "BungeeCord", baos.toByteArray());
+                        bytes.close();
+                        out.close();
+
+                        baos.close();
+                        dos.close();
+                } else {
+                    // Here portals ignore PM part. They only execute commands for players, when they enter portals.
+                    Server local = this.getServer();
+                    if (command.charAt(command.length() - 2) == '@') {
+                        command = command.substring(0, command.length() - 2);
+                        player.performCommand(command);
+                    } else {
+                        local.dispatchCommand(local.getConsoleSender(), command.replace("{PLAYER}", playerName));
+                    }
+                }
+
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
     }
 
 

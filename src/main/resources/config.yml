@@ -5,6 +5,7 @@ mysql:
   pass: password
   db: mat
 settings:
+ server_name: man10
  free_slots: 2
  disabled_worlds:
   - op
